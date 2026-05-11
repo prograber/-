@@ -240,8 +240,8 @@ echo "nameserver 10.10.100.2" >> /etc/resolv.conf
 systemctl restart network
 timedatectl set-timezone Europe/Moscow
 
-
-
+----------------
+НЕКИЙ МОДУЛЬ 2
 
 1. Настройка контроллера домена Samba DC
 Установка:
