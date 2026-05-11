@@ -110,6 +110,7 @@ ip route 0.0.0.0/0 172.16.1.1
 
 no dhcp-server 1
 ip pool VLAN200 10.10.200.2-10.10.200.30
+
 dhcp-server 1
  pool VLAN200 1
   mask 255.255.255.224
@@ -154,5 +155,87 @@ systemctl restart sshd
 
 apt-get update && apt-get install bind bind-utils -y
 
-# Настройка BIND9...
-# (полный текст зоны можно вставить при необходимости)
+# Настройка BIND9 (зоны)
+# ... (можно добавить отдельным файлом)
+
+4. HQ-CLI
+Bashhostnamectl set-hostname hq-cli.au-team.irpo
+
+mkdir -p /etc/net/ifaces/ens3
+mcedit /etc/net/ifaces/ens3/options
+TYPE=eth
+BOOTPROTO=dhcp
+
+echo "search au-team.irpo" > /etc/resolv.conf
+echo "nameserver 10.10.100.2" >> /etc/resolv.conf
+
+systemctl restart network
+timedatectl set-timezone Europe/Moscow
+
+5. BR-RTR
+Bashenable
+configure terminal
+
+hostname BR-RTR
+ip domain-name au-team.irpo
+
+username net_admin password P@ssw0rd role admin
+
+interface isp
+ ip address 172.16.2.2/28
+ ip nat outside
+exit
+
+interface br
+ ip address 10.20.20.1/28
+ ip nat inside
+exit
+
+port te1
+ service-instance te1/br
+  encapsulation untagged
+  connect ip interface br
+ exit
+
+interface tunnel.0
+ description GRE-to-HQ-RTR
+ ip address 10.10.10.2/30
+ ip tunnel 172.16.2.2 172.16.1.2 mode gre
+ ip ospf authentication message-digest
+ ip ospf message-digest-key 1 md5 P@ssw0rd
+exit
+
+router ospf 1
+ ospf router-id 10.10.10.2
+ passive-interface default
+ no passive-interface tunnel.0
+ network 10.20.20.0/28 area 0
+ network 10.10.10.0/30 area 0
+exit
+
+ip nat source dynamic inside-to-outside interface isp overload
+ip route 0.0.0.0/0 172.16.2.1
+
+ntp timezone utc+3
+write memory
+
+6. BR-SRV
+Bashhostnamectl set-hostname br-srv.au-team.irpo
+
+mkdir -p /etc/net/ifaces/ens3
+echo "10.20.20.2/28" > /etc/net/ifaces/ens3/ipv4address
+echo "default via 10.20.20.1" > /etc/net/ifaces/ens3/ipv4route
+
+mcedit /etc/net/ifaces/ens3/options
+TYPE=eth
+BOOTPROTO=static
+
+useradd sshuser -u 2026
+echo 'sshuser:P@ssw0rd' | chpasswd
+gpasswd -a sshuser wheel
+
+echo "search au-team.irpo" > /etc/resolv.conf
+echo "nameserver 10.10.100.2" >> /etc/resolv.conf
+
+systemctl restart network
+timedatectl set-timezone Europe/Moscow
